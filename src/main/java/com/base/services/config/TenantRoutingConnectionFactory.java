@@ -6,6 +6,7 @@ import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryOptions;
 import lombok.NonNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.r2dbc.connection.lookup.AbstractRoutingConnectionFactory;
 import org.springframework.stereotype.Component;
@@ -15,17 +16,17 @@ import java.util.Map;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.*;
 
-@Configuration
 @Component
 public class TenantRoutingConnectionFactory extends AbstractRoutingConnectionFactory {
 
     private final WebCommunication webCommunication;
+    private final String r2dbcUrl;
 
     private static final String TENANT_ID = "X-Tenant-ID";
-    private static final String DB_DATA = "postgres";
 
-    public TenantRoutingConnectionFactory(WebCommunication webCommunication) {
+    public TenantRoutingConnectionFactory(WebCommunication webCommunication, @Value("${spring.r2dbc.url}") String r2dbcUrl) {
         this.webCommunication = webCommunication;
+        this.r2dbcUrl = r2dbcUrl;
         // Initialize with the default connection factory
         ConnectionFactory defaultFactory = createDefaultConnectionFactory();
         Map<String, ConnectionFactory> tenantConnectionFactories = Map.of("default", defaultFactory);
@@ -36,14 +37,7 @@ public class TenantRoutingConnectionFactory extends AbstractRoutingConnectionFac
     }
 
     private ConnectionFactory createDefaultConnectionFactory() {
-        return ConnectionFactories.get(ConnectionFactoryOptions.builder()
-                .option(DRIVER, "postgresql")
-                .option(HOST, "localhost")
-                .option(PORT, 5432)
-                .option(USER, DB_DATA)
-                .option(PASSWORD, DB_DATA)
-                .option(DATABASE, "tenant123")
-                .build());
+        return ConnectionFactories.get(r2dbcUrl);
     }
 
     @Override
