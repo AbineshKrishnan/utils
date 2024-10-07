@@ -5,13 +5,15 @@ import com.base.services.utils.CommonUtils;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryOptions;
+import jakarta.annotation.PreDestroy;
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.r2dbc.connection.lookup.AbstractRoutingConnectionFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
-
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 import java.util.Map;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.*;
@@ -21,6 +23,10 @@ public class TenantRoutingConnectionFactory extends AbstractRoutingConnectionFac
 
     private final WebCommunication webCommunication;
     private final String r2dbcUrl;
+    Cache<String, ConnectionFactory> tenantConnectionFactoryCache = Caffeine.newBuilder()
+            .expireAfterAccess(5, TimeUnit.MINUTES)
+            .maximumSize(100)
+            .build();
 
     private static final String TENANT_ID = "X-Tenant-ID";
 
@@ -44,10 +50,25 @@ public class TenantRoutingConnectionFactory extends AbstractRoutingConnectionFac
     @NonNull
     protected Mono<ConnectionFactory> determineTargetConnectionFactory() {
         return CommonUtils.getHeaderValue(TENANT_ID)
-                .flatMap(tenantId -> tenantId.isBlank()
-                        ? Mono.just(createDefaultConnectionFactory())
-                        : webCommunication.getTenant(tenantId)
-                        .map(apiTenantResponse -> this.createTenantConnectionFactory(apiTenantResponse.getResult())));
+                .flatMap(tenantId -> {
+                    if (tenantId.isBlank()) {
+                        return Mono.just(createDefaultConnectionFactory());
+                    }
+
+                    // Check cache first
+                    ConnectionFactory cachedFactory = tenantConnectionFactoryCache.getIfPresent(tenantId);
+                    if (cachedFactory != null) {
+                        return Mono.just(cachedFactory);
+                    }
+
+                    // Retrieve and create a new connection factory
+                    return webCommunication.getTenant(tenantId)
+                            .map(apiTenantResponse -> {
+                                ConnectionFactory factory = createTenantConnectionFactory(apiTenantResponse.getResult());
+                                tenantConnectionFactoryCache.put(tenantId, factory);  // Cache the connection factory
+                                return factory;
+                            });
+                });
     }
 
     @Override
@@ -65,6 +86,11 @@ public class TenantRoutingConnectionFactory extends AbstractRoutingConnectionFac
                 .option(PASSWORD, tenant.getDbPassword())
                 .option(DATABASE, tenant.getDbName())
                 .build());
+    }
+
+    @PreDestroy
+    public void clearCacheOnShutdown() {
+        tenantConnectionFactoryCache.invalidateAll();
     }
 
 }
