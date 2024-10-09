@@ -33,12 +33,9 @@ public class TenantRoutingConnectionFactory extends AbstractRoutingConnectionFac
     public TenantRoutingConnectionFactory(WebCommunication webCommunication, @Value("${spring.r2dbc.url}") String r2dbcUrl) {
         this.webCommunication = webCommunication;
         this.r2dbcUrl = r2dbcUrl;
-        // Initialize with the default connection factory
         ConnectionFactory defaultFactory = createDefaultConnectionFactory();
         Map<String, ConnectionFactory> tenantConnectionFactories = Map.of("default", defaultFactory);
-        // Set the target connection factories
         setTargetConnectionFactories(tenantConnectionFactories);
-        // Set the default connection factory
         setDefaultTargetConnectionFactory(defaultFactory);
     }
 
