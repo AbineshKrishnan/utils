@@ -10,7 +10,7 @@
 	</parent>
 
 	<groupId>com.base.utils</groupId>
-	<artifactId>mmr-utils</artifactId>
+	<artifactId>utils</artifactId>
 	<version>0.0.1</version>
 
 	<properties>
